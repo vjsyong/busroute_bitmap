@@ -28,8 +28,6 @@ Converts Hong Kong bus route sign PNGs (dot-matrix displays) into bitmaps, with 
 
 ---
 
-
-
 ## Setup
 
 ```
