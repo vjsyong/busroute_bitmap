@@ -22,6 +22,14 @@ Converts Hong Kong bus route sign PNGs (dot-matrix displays) into bitmaps, with 
 
 ---
 
+**App Screenshot**  
+![App Screenshot](images/app-screenshot.png)  
+*Screenshot of app*
+
+---
+
+
+
 ## Setup
 
 ```
