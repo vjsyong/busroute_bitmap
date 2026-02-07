@@ -138,7 +138,7 @@ def render_bitmap(
     scalar: int = 10,
     dot_pitch: int = 2,
     on_color: tuple[int, int, int] = (255, 165, 0),
-    off_color: tuple[int, int, int] = (32, 16, 0),
+    off_color: tuple[int, int, int] = (24, 12, 0),
 ) -> np.ndarray:
     """Re-render a dot-matrix bitmap at higher resolution.
 

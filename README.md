@@ -2,6 +2,13 @@
 
 Converts Hong Kong bus route sign PNGs (dot-matrix displays) into bitmaps, with the option to re-render them at a custom size and colour.
 
+### Example Output
+
+| Original | Bitmap | Rendered |
+|---|---|---|
+| ![Original](input_image/289KY.A2.PNG) | ![Bitmap](output_image/289KY.A2_bitmap.bmp) | ![Render](output_image/289KY.A2_bitmap_render.png) |
+| Source dot-matrix PNG | 1-pixel-per-dot bitmap (33×128) | Re-rendered at 10px/dot, 2px pitch |
+
 ## Setup
 
 ```
