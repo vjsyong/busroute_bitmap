@@ -12,7 +12,7 @@ Converts Hong Kong bus route sign PNGs (dot-matrix displays) into bitmaps, with 
 
 **Bitmap**  
 ![Bitmap](images/680Y.A4-bitmap.png)  
-*1-pixel-per-dot bitmap (33×128)*
+*1-pixel-per-dot bitmap (33×128) - Scaled up 10x for readme*
 
 ---
 
