@@ -219,6 +219,42 @@ def bus_route_png_to_bmp(input_path: str, output_dir: str = "output_image") -> t
     return bitmap_path, bitmap
 
 
+def _make_rainbow_lut(n: int) -> list[tuple[int, int, int]]:
+    """Generate *n* evenly-spaced rainbow colours (BGR) by sweeping HSV hue."""
+    lut = []
+    for i in range(n):
+        hue = int(180 * i / max(n - 1, 1))  # OpenCV hue range 0-179
+        pixel = np.uint8([[[hue, 255, 255]]])
+        bgr = cv2.cvtColor(pixel, cv2.COLOR_HSV2BGR)[0][0]
+        lut.append((int(bgr[0]), int(bgr[1]), int(bgr[2])))
+    return lut
+
+
+def _lerp_color_bgr(
+    c1: tuple[int, int, int],
+    c2: tuple[int, int, int],
+    t: float,
+) -> tuple[int, int, int]:
+    """Linearly interpolate between two BGR colours.  *t* ∈ [0, 1]."""
+    return (
+        int(c1[0] + (c2[0] - c1[0]) * t),
+        int(c1[1] + (c2[1] - c1[1]) * t),
+        int(c1[2] + (c2[2] - c1[2]) * t),
+    )
+
+
+def _gradient_t(
+    r: int, c: int, n_rows: int, n_cols: int, direction: str,
+) -> float:
+    """Return a normalised position *t* ∈ [0, 1] for a gradient."""
+    if direction == "vertical":
+        return r / max(n_rows - 1, 1)
+    elif direction == "diagonal":
+        return (r + c) / max(n_rows + n_cols - 2, 1)
+    else:  # horizontal (default)
+        return c / max(n_cols - 1, 1)
+
+
 def render_bitmap(
     bitmap_or_path,
     output_path: str = None,
@@ -226,17 +262,28 @@ def render_bitmap(
     dot_pitch: int = 2,
     on_color: tuple[int, int, int] = (255, 165, 0),
     off_color: tuple[int, int, int] = (24, 12, 0),
+    # --- NEW effect options ---
+    font_effect: str = "solid",          # "solid", "rainbow", "gradient"
+    on_color_end: tuple[int, int, int] | None = None,  # second colour for font gradient
+    bg_effect: str = "solid",            # "solid", "gradient"
+    off_color_end: tuple[int, int, int] | None = None,  # second colour for bg gradient
+    gradient_direction: str = "horizontal",  # "horizontal", "vertical", "diagonal"
 ) -> np.ndarray:
     """Re-render a dot-matrix bitmap at higher resolution.
 
     Args:
         bitmap_or_path: Either a file path to a .bmp, or a 2-D NumPy array
                         (grayscale, 0/255) produced by bus_route_png_to_bmp.
-        output_path: Where to save the rendered image. ``None`` to skip saving.
-        scalar:      Number of pixels per dot (each dot becomes a scalar × scalar square).
-        dot_pitch:   Number of blank (off_color) pixels inserted between adjacent dots.
-        on_color:    (R, G, B) colour for illuminated dots.
-        off_color:   (R, G, B) colour for dark dots.
+        output_path:    Where to save the rendered image. ``None`` to skip saving.
+        scalar:         Number of pixels per dot (scalar × scalar square).
+        dot_pitch:      Number of blank pixels inserted between adjacent dots.
+        on_color:       (R, G, B) colour for illuminated dots.
+        off_color:      (R, G, B) colour for dark dots / background.
+        font_effect:    "solid" | "rainbow" | "gradient".
+        on_color_end:   Second (R, G, B) for the font gradient endpoint.
+        bg_effect:      "solid" | "gradient".
+        off_color_end:  Second (R, G, B) for the background gradient endpoint.
+        gradient_direction: "horizontal" | "vertical" | "diagonal".
 
     Returns:
         The rendered image as a NumPy array (BGR).
@@ -255,9 +302,30 @@ def render_bitmap(
     canvas_h = n_rows * cell - dot_pitch  # no trailing gap
     canvas_w = n_cols * cell - dot_pitch
 
-    # Fill canvas with black (gap colour) then paint dots on top
-    on_bgr = (on_color[2], on_color[1], on_color[0])
-    off_bgr = (off_color[2], off_color[1], off_color[0])
+    # Pre-compute ON colours per grid position
+    on_bgr_base = (on_color[2], on_color[1], on_color[0])
+    off_bgr_base = (off_color[2], off_color[1], off_color[0])
+
+    # Rainbow LUT (sweep across columns by default, or by direction)
+    rainbow_lut: list[tuple[int, int, int]] | None = None
+    if font_effect == "rainbow":
+        # Size of the LUT depends on direction
+        if gradient_direction == "vertical":
+            rainbow_lut = _make_rainbow_lut(n_rows)
+        elif gradient_direction == "diagonal":
+            rainbow_lut = _make_rainbow_lut(n_rows + n_cols - 1)
+        else:
+            rainbow_lut = _make_rainbow_lut(n_cols)
+
+    on_end_bgr = (
+        (on_color_end[2], on_color_end[1], on_color_end[0])
+        if on_color_end else on_bgr_base
+    )
+    off_end_bgr = (
+        (off_color_end[2], off_color_end[1], off_color_end[0])
+        if off_color_end else off_bgr_base
+    )
+
     canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
 
     # Paint each dot
@@ -265,7 +333,30 @@ def render_bitmap(
         for c in range(n_cols):
             y = r * cell
             x = c * cell
-            color = on_bgr if bitmap[r, c] > 0 else off_bgr
+
+            # --- Determine ON colour ---
+            if bitmap[r, c] > 0:
+                if font_effect == "rainbow" and rainbow_lut is not None:
+                    if gradient_direction == "vertical":
+                        idx = r
+                    elif gradient_direction == "diagonal":
+                        idx = r + c
+                    else:
+                        idx = c
+                    color = rainbow_lut[min(idx, len(rainbow_lut) - 1)]
+                elif font_effect == "gradient":
+                    t = _gradient_t(r, c, n_rows, n_cols, gradient_direction)
+                    color = _lerp_color_bgr(on_bgr_base, on_end_bgr, t)
+                else:
+                    color = on_bgr_base
+            else:
+                # --- Determine OFF / background colour ---
+                if bg_effect == "gradient":
+                    t = _gradient_t(r, c, n_rows, n_cols, gradient_direction)
+                    color = _lerp_color_bgr(off_bgr_base, off_end_bgr, t)
+                else:
+                    color = off_bgr_base
+
             canvas[y : y + scalar, x : x + scalar] = color
 
     # Save (only when an output path is given or can be derived)

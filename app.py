@@ -80,6 +80,11 @@ def _render(
     dot_pitch: int,
     on_color: str,
     off_color: str,
+    font_effect: str,
+    on_color_end: str,
+    bg_effect: str,
+    off_color_end: str,
+    gradient_direction: str,
 ) -> tuple[np.ndarray | None, str | None]:
     """Render the cached bitmap with the current settings."""
     bitmap = _process_upload(file_path)
@@ -89,9 +94,16 @@ def _render(
     sc = int(scalar)
     dp = int(dot_pitch)
 
-    # Parse colour string → (R, G, B)
+    # Parse colour strings → (R, G, B)
     on_rgb = _parse_color(on_color)
     off_rgb = _parse_color(off_color)
+    on_end_rgb = _parse_color(on_color_end)
+    off_end_rgb = _parse_color(off_color_end)
+
+    # Map display labels to internal keys
+    fe = font_effect.lower()   # "Solid" / "Rainbow" / "Gradient"
+    be = bg_effect.lower()     # "Solid" / "Gradient"
+    gd = gradient_direction.lower()  # "Horizontal" / "Vertical" / "Diagonal"
 
     canvas_bgr = render_bitmap(
         bitmap,
@@ -100,6 +112,11 @@ def _render(
         dot_pitch=dp,
         on_color=on_rgb,
         off_color=off_rgb,
+        font_effect=fe,
+        on_color_end=on_end_rgb,
+        bg_effect=be,
+        off_color_end=off_end_rgb,
+        gradient_direction=gd,
     )
 
     # Save render to a temp file with the required naming
@@ -151,6 +168,45 @@ def build_app() -> gr.Blocks:
                     value="#201000",
                 )
 
+                gr.Markdown("### 🎨 Effects")
+                font_effect = gr.Radio(
+                    choices=["Solid", "Rainbow", "Gradient"],
+                    value="Solid",
+                    label="Font effect",
+                )
+                on_color_end = gr.ColorPicker(
+                    label="Font gradient end colour",
+                    value="#FF00FF",
+                    visible=False,
+                )
+                bg_effect = gr.Radio(
+                    choices=["Solid", "Gradient"],
+                    value="Solid",
+                    label="Background effect",
+                )
+                off_color_end = gr.ColorPicker(
+                    label="Background gradient end colour",
+                    value="#000030",
+                    visible=False,
+                )
+                gradient_direction = gr.Radio(
+                    choices=["Horizontal", "Vertical", "Diagonal"],
+                    value="Horizontal",
+                    label="Gradient / rainbow direction",
+                )
+
+                # Show/hide secondary colour pickers based on effect selection
+                font_effect.change(
+                    fn=lambda v: gr.update(visible=(v == "Gradient")),
+                    inputs=[font_effect],
+                    outputs=[on_color_end],
+                )
+                bg_effect.change(
+                    fn=lambda v: gr.update(visible=(v == "Gradient")),
+                    inputs=[bg_effect],
+                    outputs=[off_color_end],
+                )
+
             with gr.Column(scale=3):
                 preview = gr.Image(label="Rendered preview", type="numpy")
                 with gr.Row():
@@ -158,7 +214,11 @@ def build_app() -> gr.Blocks:
                     render_download = gr.File(label="Download render (.png)", interactive=False)
 
         # All inputs that should trigger a live re-render
-        inputs = [file_input, scalar, dot_pitch, on_color, off_color]
+        inputs = [
+            file_input, scalar, dot_pitch, on_color, off_color,
+            font_effect, on_color_end, bg_effect, off_color_end,
+            gradient_direction,
+        ]
         render_outputs = [preview, render_download]
 
         # Wire every control to the render function
